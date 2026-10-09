@@ -1,8 +1,9 @@
 /* Service worker: aplikasi tetap terbuka tanpa internet. */
-const VERSION = 'chreswill-v1.1.0';
+const VERSION = 'chreswill-v2.0.0';
 const CORE = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/util.js', 'js/db.js', 'js/parse.js', 'js/ocr.js', 'js/invoice.js', 'js/sync.js', 'js/app.js',
+  'js/scene3d.js', 'vendor/three.min.js', 'vendor/firebase/firebase-app-compat.js', 'vendor/firebase/firebase-auth-compat.js', 'vendor/firebase/firebase-firestore-compat.js',
   'vendor/xlsx.full.min.js', 'vendor/jspdf.umd.min.js', 'vendor/jspdf.plugin.autotable.min.js', 'vendor/jszip.min.js',
   'fonts/pjs-400.woff2', 'fonts/pjs-500.woff2', 'fonts/pjs-700.woff2', 'fonts/pjs-800.woff2',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'

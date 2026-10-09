@@ -34,7 +34,6 @@
 
   /* ---------- Keadaan ---------- */
   const S = { role: null, settings: null, orders: [], drafts: [], editOrderId: null };
-  try { S.role = localStorage.getItem('role'); } catch (e) {}
 
   const STATUS = { baru: 'Baru', belanja: 'Sedang belanja', dibeli: 'Sudah dibeli', diantar: 'Diantar', selesai: 'Selesai' };
   const status = o => o.antar?.selesai ? 'selesai' : o.antar?.mulai ? 'diantar' : Calc.semuaDibeli(o) ? 'dibeli' : Calc.dibeli(o) ? 'belanja' : 'baru';
@@ -45,8 +44,9 @@
   const aktif = o => status(o) !== 'selesai' || o.tanggal >= U.today();
 
   async function load() {
-    S.settings = await DB.settings();
-    S.orders = await DB.orders.all();
+    S.role = DB.auth.role;
+    S.settings = DB.auth.user ? await DB.settings() : structuredClone(DB.DEFAULT_SETTINGS);
+    S.orders = DB.auth.user ? await DB.orders.all() : [];
   }
 
   /* ---------- Lembar (modal) ---------- */
@@ -99,7 +99,7 @@
   /* ---------- Navigasi ---------- */
   const NAV = {
     xander: [['beranda', 'Beranda', 'home'], ['permintaan', 'Permintaan', 'inbox'], ['invoice', 'Invoice', 'receipt'], ['arsip', 'Arsip', 'archive'], ['pengaturan', 'Atur', 'gear']],
-    gil: [['beranda', 'Beranda', 'home'], ['belanja', 'Belanja', 'cart'], ['antar', 'Antar', 'truck'], ['pengaturan', 'Atur', 'gear']]
+    gil: [['beranda', 'Beranda', 'home'], ['nota', 'Nota', 'upload'], ['belanja', 'Belanja', 'cart'], ['antar', 'Antar', 'truck'], ['pengaturan', 'Atur', 'gear']]
   };
   function route() {
     const h = location.hash.replace(/^#\/?/, '');
@@ -128,16 +128,42 @@
     };
     nav.innerHTML = `<div class="brand">Chreswill MBG<small>${E(S.settings.perusahaan.nama)}</small></div>` +
       NAV[S.role].map(([k, l, i]) => `<a href="#/${k}" ${cur === k ? 'aria-current="page"' : ''}>${ic(i)}<span>${l}</span>${counts[k] ? `<span class="dot">${counts[k] > 99 ? '99+' : counts[k]}</span>` : ''}</a>`).join('') +
-      `<div class="who">Masuk sebagai <b>${isX() ? 'Xander' : 'Gil'}</b></div>`;
+      `<div class="who">${syncChip()}<br>Masuk sebagai <b>${isX() ? 'Xander' : 'Gilbert'}</b></div>`;
   }
 
+  /* status sinkron untuk ditampilkan */
+  function syncChip() {
+    const st = DB.status;
+    const [cls, txt] = !st.online ? ['b-warn', 'Offline · tersimpan, dikirim saat online'] : st.pending ? ['b-belanja', 'Mengirim…'] : ['b-selesai', 'Tersambung real time'];
+    return `<span class="badge ${cls}" data-sync>${txt}</span>`;
+  }
+
+  /* gambar ulang saat data dari HP lain masuk, tapi jangan ganggu orang yang sedang mengetik atau membuka lembar */
+  let rTimer = null;
+  function scheduleRender() {
+    clearTimeout(rTimer);
+    rTimer = setTimeout(() => {
+      const a = document.activeElement;
+      const typing = a && $('#view').contains(a) && /INPUT|TEXTAREA|SELECT/.test(a.tagName);
+      if (typing || $('#sheet-root .scrim') || (S.scene && S.scene.busy) || S.drafts.length) { scheduleRender(); return; }
+      render();
+    }, 350);
+  }
+
+  let rendering = false;
   async function render() {
+    if (rendering) { scheduleRender(); return; }
+    rendering = true;
+    try { await renderNow(); } finally { rendering = false; }
+  }
+  async function renderNow() {
     await load();
     applyTheme();
     const r = route();
     const view = $('#view');
     if (!S.role) { renderNav(); view.innerHTML = welcome(); mountWelcome(view); return; }
     const allowed = NAV[S.role].map(n => n[0]).concat(isX() ? ['tinjau', 'antar'] : []);
+    if (S.scene && r.name !== 'nota') S.sceneHost?.remove(); // area 3D disimpan, tidak dibuat ulang
     const name = allowed.includes(r.name) ? r.name : 'beranda';
     renderNav(name);
     const V = isX() ? XV : GV;
@@ -153,13 +179,43 @@
     return `<div class="welcome"><div class="box fade-in">
       <p class="mute small">${E(S.settings.perusahaan.nama)}</p>
       <h1 style="margin:4px 0 6px">Selamat datang</h1>
-      <p class="mute">Pilih siapa yang memakai perangkat ini. Bisa diganti kapan saja di menu Atur.</p>
-      <button class="card tap role-card" data-role="xander"><span class="av" style="background:#1B1236;color:var(--tosca)">X</span><span><b>Xander</b><br><span class="mute small">Admin: permintaan, invoice, arsip</span></span></button>
-      <button class="card tap role-card" data-role="gil"><span class="av" style="background:var(--tosca);color:#1B1236">G</span><span><b>Gil</b><br><span class="mute small">Lapangan: belanja dan antar</span></span></button>
+      <p class="mute">Pilih siapa yang memakai perangkat ini.</p>
+      <button class="card tap role-card" data-role="xander"><span class="av" style="background:#1B1236;color:var(--tosca)">X</span><span><b>Xander</b><br><span class="mute small">Admin: invoice, harga, arsip · pakai kata kunci</span></span></button>
+      <button class="card tap role-card" data-role="gil"><span class="av" style="background:var(--tosca);color:#1B1236">G</span><span><b>Gilbert</b><br><span class="mute small">Lapangan: masukkan nota, belanja, antar</span></span></button>
+      ${!navigator.onLine ? '<p class="small" style="margin-top:14px;color:var(--warn-ink)">Perangkat sedang offline. Masuk pertama kali butuh internet.</p>' : ''}
     </div></div>`;
   }
   function mountWelcome(v) {
-    $$('[data-role]', v).forEach(b => b.onclick = () => { S.role = b.dataset.role; try { localStorage.setItem('role', S.role); } catch (e) {} U.buzz(); go('#/beranda'); });
+    $('[data-role=gil]', v).onclick = async e => {
+      const b = e.currentTarget; b.setAttribute('aria-busy', 'true');
+      try { await DB.auth.gil(); U.buzz(); location.hash = '#/nota'; }
+      catch (er) { U.toast('Belum bisa masuk. Periksa internet lalu coba lagi.', 'error', 4000); }
+      b.removeAttribute('aria-busy');
+    };
+    $('[data-role=xander]', v).onclick = () => loginXander();
+  }
+  function loginXander() {
+    sheet(`<h2>Masuk sebagai Xander</h2><p class="mute small" style="margin:6px 0 14px">Kata kunci hanya diketahui pemilik.</p>
+      <form data-f><div class="field"><label class="lbl" for="pw">Kata kunci</label>
+        <div class="row"><input class="input" id="pw" type="password" autocomplete="current-password" required autofocus><button type="button" class="btn icon" data-show aria-label="Tampilkan kata kunci">${ic('eye')}</button></div>
+        <p class="err" data-err hidden></p></div>
+        <button class="btn primary block" type="submit">Masuk</button></form>`,
+      (el, close) => {
+        const pw = $('#pw', el), err = $('[data-err]', el);
+        $('[data-show]', el).onclick = () => { pw.type = pw.type === 'password' ? 'text' : 'password'; pw.focus(); };
+        pw.oninput = () => { err.hidden = true; };
+        $('[data-f]', el).onsubmit = async e => {
+          e.preventDefault();
+          const btn = $('[type=submit]', el); btn.setAttribute('aria-busy', 'true');
+          try { await DB.auth.xander(pw.value); close(); U.buzz(); location.hash = '#/beranda'; }
+          catch (er) {
+            const c = er.code || '';
+            err.textContent = /wrong-password|invalid-credential|invalid-login/.test(c) ? 'Kata kunci salah. Coba lagi.' : /too-many/.test(c) ? 'Terlalu banyak percobaan. Tunggu beberapa menit.' : /network/.test(c) ? 'Tidak ada internet. Masuk pertama kali butuh internet.' : 'Belum bisa masuk: ' + (er.message || c);
+            err.hidden = false; pw.select();
+          }
+          btn.removeAttribute('aria-busy');
+        };
+      });
   }
 
   /* ---------- Terima paket / cadangan ---------- */
@@ -259,7 +315,8 @@
 
     return {
       html: `<div class="top fade-in"><div><h1>Halo, Xander</h1><p class="mute sub">${U.fmtDateLong(t)} · ${U.nowTime()} WIT</p></div>
-        <button class="btn sm" data-act="paket">${ic('pkg')} Terima paket</button></div>
+        ${syncChip()}</div>
+        ${'Notification' in window && Notification.permission === 'default' ? `<button class="card tap row" data-act="notif" style="width:100%;margin-bottom:12px;text-align:left"><span class="grow"><b>Aktifkan notifikasi</b><br><span class="small mute">Bunyi dan pemberitahuan saat Gilbert memasukkan nota baru</span></span>${ic('alert').replace('<svg', '<svg style="width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2"')}</button>` : ''}
 
         <div class="card hero fade-in"><div class="small">Hari ini · ${hariIni.length} permintaan</div>
           <div class="big">${totDone}<span style="font-size:.5em"> / ${totItems} barang dibeli</span></div>
@@ -279,7 +336,7 @@
         ${S.settings.dapur.map(d => { const os = bulan.filter(o => o.dapurId === d.id); return `<div class="card flat row" style="margin-top:8px"><span class="grow"><b>${E(d.nama)}</b><br><span class="small mute">${os.length} permintaan bulan ini</span></span><span class="num" style="font-weight:800">${U.rpShort(os.reduce((s, o) => s + Calc.total(o), 0))}</span></div>`; }).join('')}
         </div>
         <div class="section"><a class="btn primary block" href="#/permintaan">${ic('plus')} Tambah permintaan</a></div>`,
-      mount: v => { $('[data-act=paket]', v).onclick = () => receivePaket(); }
+      mount: v => { const n = $('[data-act=notif]', v); if (n) n.onclick = async () => { Sound.unlock(); await Notification.requestPermission(); render(); }; }
     };
   };
 
@@ -307,7 +364,7 @@
           <button class="btn sm grow" data-act="manual">${ic('edit')} Ketik manual</button>
         </div>
         <div class="row between section"><div class="seg" style="width:220px"><button data-f="aktif" aria-pressed="${filterPerm === 'aktif'}">Aktif</button><button data-f="semua" aria-pressed="${filterPerm === 'semua'}">Semua</button></div>
-          ${list.length ? `<button class="btn sm" data-act="kirim">${ic('send')} Kirim ke Gil</button>` : ''}</div>
+</div>
         <div style="margin-top:12px">${items || `<div class="empty">${ic('basket')}<h3>Belum ada permintaan</h3><p>Masukkan nota pesanan dari dapur: file Excel, foto, atau ketik sendiri.</p></div>`}</div>`,
       mount: v => {
         const drop = $('.drop', v);
@@ -475,7 +532,7 @@
         if (!ok) continue;
       }
       const o = existing || { id: U.uid('o'), createdAt: Date.now(), log: [] };
-      Object.assign(o, { dapurId: d.dapurId, tanggal: d.tanggal, jamAntar: d.jamAntar, noNota: d.noNota, totalNota: d.totalNota ?? null, sumber: o.sumber || d.sumber });
+      Object.assign(o, { dapurId: d.dapurId, tanggal: d.tanggal, jamAntar: d.jamAntar, noNota: d.noNota, totalNota: d.totalNota ?? null, sumber: o.sumber || d.sumber, autoInvoice: true });
       o.items = d.items.map(it => {
         const old = existing?.items.find(x => x.id === it.id);
         return { ...(old || {}), id: it.id || U.uid('i'), nama: String(it.nama).trim(), satuan: String(it.satuan || '').trim(), qty: +it.qty || 0, hargaNota: +it.hargaNota || 0 };
@@ -535,7 +592,7 @@
 
         <div class="section stack">
           <button class="btn primary block" data-act="invoice">${ic('receipt')} ${o.invoice ? 'Buat ulang invoice ' + E(o.invoice.no) : 'Buat invoice'}</button>
-          <div class="row wrap"><button class="btn grow" data-act="kirim">${ic('send')} Kirim ke Gil</button><a class="btn grow" href="#/antar/${o.id}">${ic('truck')} Pengantaran</a></div>
+          <div class="row wrap"><a class="btn grow" href="#/antar/${o.id}">${ic('truck')} Pengantaran</a></div>
         </div>
 
         <div class="section"><h2>Lampiran</h2>
@@ -570,7 +627,6 @@
         if (a('selisihok')) a('selisihok').onclick = async () => { o.selisihOk = true; o.log.push({ t: Date.now(), m: 'Selisih total nota dikonfirmasi' }); await DB.orders.put(o); render(); };
         a('ubah').onclick = () => { S.drafts = [{ key: U.uid(), dapurId: o.dapurId, tanggal: o.tanggal, jamAntar: o.jamAntar, noNota: o.noNota, items: structuredClone(o.items), totalNota: o.totalNota, sumber: o.sumber, file: null }]; S.editOrderId = o.id; go('#/tinjau'); };
         a('invoice').onclick = () => buatInvoice(o);
-        a('kirim').onclick = () => sendPaket([o]);
         a('hapus').onclick = async () => { if (await confirmSheet({ title: 'Hapus permintaan ini?', body: 'Nota, invoice, dan foto bukti di perangkat ini ikut terhapus. Tidak bisa dibatalkan.', ok: 'Hapus', danger: true })) { await DB.orders.del(o.id); U.toast('Permintaan dihapus'); go('#/permintaan'); } };
         $$('[data-open]', v).forEach(b => b.onclick = async () => { const f = await DB.files.get(b.dataset.open); window.open(URL.createObjectURL(f.blob), '_blank'); });
         $$('[data-dl]', v).forEach(b => b.onclick = async () => { const f = await DB.files.get(b.dataset.dl); U.download(f.blob, f.name); });
@@ -583,22 +639,94 @@
       const ok = await confirmSheet({ title: 'Belum semua barang dicentang Gil', body: `${Calc.dibeli(o)} dari ${o.items.length} barang sudah dibeli. Barang yang belum dicentang dihitung sesuai qty nota.`, ok: 'Tetap buat invoice' });
       if (!ok) return;
     }
+    const { pdf, name } = await makeInvoice(o);
+    U.buzz([10, 30, 10]);
+    invoiceSheet(o, pdf, name);
+    render();
+  }
+
+  /* Tanda isi invoice: berubah kalau qty kirim, barang kosong, atau harga jual berubah */
+  const invSig = o => JSON.stringify(o.items.map(it => [it.id, Calc.qty(it), Calc.jual(it), it.nama, it.satuan]));
+
+  /* Buat/perbarui invoice + PDF (dipakai tombol dan otomatisasi) */
+  async function makeInvoice(o, auto = false) {
     const d = dapurOf(o);
     // tanggal invoice = tanggal antar (sesuai template); nomor diperbarui bila tanggal/dapur nota berubah
     const no = await DB.nextInvoiceNo(d, o.tanggal, o.id);
-    if (!o.invoice) o.invoice = { no, tanggal: o.tanggal, lunas: false };
+    const baru = !o.invoice;
+    if (baru) o.invoice = { no, tanggal: o.tanggal, lunas: false };
     else { if (!o.invoice.no.startsWith(no.split('-')[0])) o.invoice.no = no; o.invoice.tanggal = o.tanggal; }
     o.invoice.total = Calc.total(o);
+    o.invoice.sig = invSig(o);
     S.settings = await DB.settings();
     const pdf = Invoice.pdf(o, d, S.settings);
     const name = Invoice.fileName(o, d, 'pdf');
     for (const f of await DB.files.byOrder(o.id)) if (f.kind === 'invoice') await DB.files.del(f.id);
     await DB.files.put({ id: U.uid('f'), orderId: o.id, kind: 'invoice', name, type: 'application/pdf', blob: pdf, t: Date.now() });
-    o.log.push({ t: Date.now(), m: `Invoice ${o.invoice.no} dibuat (${U.rp(o.invoice.total)})` });
+    o.log = [...(o.log || []), { t: Date.now(), m: `Invoice ${o.invoice.no} ${baru ? 'dibuat' : 'diperbarui'}${auto ? ' otomatis' : ''} (${U.rp(o.invoice.total)})` }];
     await DB.orders.put(o);
-    U.buzz([10, 30, 10]);
-    invoiceSheet(o, pdf, name);
-    render();
+    return { pdf, name, baru };
+  }
+  /* PDF invoice dibuat ulang kalau belum ada di perangkat ini */
+  async function invoicePdf(o) {
+    const f = (await DB.files.byOrder(o.id)).find(x => x.kind === 'invoice');
+    if (f) return { pdf: f.blob, name: f.name };
+    const d = dapurOf(o);
+    const pdf = Invoice.pdf(o, d, S.settings), name = Invoice.fileName(o, d, 'pdf');
+    await DB.files.put({ id: U.uid('f'), orderId: o.id, kind: 'invoice', name, type: 'application/pdf', blob: pdf, t: Date.now() });
+    return { pdf, name };
+  }
+
+  /* ---------- Otomatis di HP Xander: invoice langsung jadi saat Gilbert memasukkan nota ---------- */
+  const Auto = { busy: new Set(), seen: null };
+  async function autoRun() {
+    if (!isX() || !DB.status.firstLoad) return;
+    const list = await DB.orders.all();
+    if (!Auto.seen) Auto.seen = new Set(list.map(o => o.id)); // yang sudah ada sebelum aplikasi dibuka tidak diberi bunyi
+    S.settings = await DB.settings();
+    for (const o of list) {
+      if (Auto.busy.has(o.id)) continue;
+      const fresh = !Auto.seen.has(o.id);
+      const perluBaru = o.autoInvoice && !o.invoice && o.dapurId && o.items.length;
+      const perluUlang = o.invoice && !o.invoice.lunas && o.invoice.sig && o.invoice.sig !== invSig(o);
+      if (!perluBaru && !perluUlang) { Auto.seen.add(o.id); continue; }
+      Auto.busy.add(o.id);
+      try {
+        await makeInvoice(o, true);
+        const d = dapurOf(o);
+        if (perluBaru) notify(`Nota baru: ${d?.nama || 'dapur'}`, `Invoice ${o.invoice.no} sudah jadi · ${U.rp(o.invoice.total)}`, `#/permintaan/${o.id}`, fresh);
+        else U.toast(`Invoice ${o.invoice.no} diperbarui: ${U.rp(o.invoice.total)}`, 'ok', 3500);
+      } catch (e) { console.error('auto invoice', e); }
+      Auto.seen.add(o.id); Auto.busy.delete(o.id);
+    }
+  }
+  /* bunyi pendek dua nada (Web Audio, tanpa file) */
+  const Sound = (() => {
+    let ctx;
+    const unlock = () => { try { ctx = ctx || new (window.AudioContext || window.webkitAudioContext)(); ctx.resume(); } catch (e) {} };
+    addEventListener('pointerdown', unlock, { once: true });
+    const play = () => {
+      if (!ctx) return;
+      [[880, 0], [1320, .14]].forEach(([f, t]) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = 'sine'; o.frequency.value = f; o.connect(g); g.connect(ctx.destination);
+        const s0 = ctx.currentTime + t;
+        g.gain.setValueAtTime(0, s0); g.gain.linearRampToValueAtTime(.25, s0 + .015); g.gain.exponentialRampToValueAtTime(.001, s0 + .22);
+        o.start(s0); o.stop(s0 + .24);
+      });
+    };
+    return { unlock, play };
+  })();
+  function notify(title, body, href, loud = true) {
+    U.toast(`${title}. ${body}`, 'ok', 5000);
+    if (!loud) return;
+    Sound.play(); U.buzz([20, 60, 20]);
+    try {
+      if ('Notification' in window && Notification.permission === 'granted' && document.visibilityState !== 'visible') {
+        const n = new Notification(title, { body, icon: 'icons/icon-192.png', tag: href });
+        n.onclick = () => { focus(); location.hash = href; n.close(); };
+      }
+    } catch (e) {}
   }
 
   function invoiceSheet(o, pdf, name) {
@@ -643,9 +771,8 @@
           const o = S.orders.find(x => x.id === card.dataset.id);
           $('[data-lunas]', card).onclick = async () => { o.invoice.lunas = !o.invoice.lunas; o.log.push({ t: Date.now(), m: o.invoice.lunas ? 'Invoice ditandai lunas' : 'Tanda lunas dibatalkan' }); await DB.orders.put(o); U.buzz(); render(); };
           $('[data-share]', card).onclick = async () => {
-            const f = (await DB.files.byOrder(o.id)).find(x => x.kind === 'invoice');
-            if (!f) { U.toast('File invoice belum ada. Buat ulang dari halaman permintaan.', 'warn'); return; }
-            invoiceSheet(o, f.blob, f.name);
+            const f = await invoicePdf(o);
+            invoiceSheet(o, f.pdf, f.name);
           };
         });
       }
@@ -695,19 +822,127 @@
     const tot = list.reduce((s, o) => s + o.items.length, 0), done = list.reduce((s, o) => s + Calc.dibeli(o), 0);
     const selesaiHariIni = S.orders.filter(o => o.antar?.selesai && o.tanggal === U.today());
     return {
-      html: `<div class="top fade-in"><div><h1>Halo, Gil</h1><p class="mute sub">${U.fmtDateLong(U.today())} · ${U.nowTime()} WIT</p></div><span class="badge b-diantar">Mode pasar</span></div>
+      html: `<div class="top fade-in"><div><h1>Halo, Gilbert</h1><p class="mute sub">${U.fmtDateLong(U.today())} · ${U.nowTime()} WIT</p></div>${syncChip()}</div>
         ${list.length ? `<a class="card hero tap fade-in" href="#/belanja" style="display:block;text-decoration:none"><div class="small">${list.length} permintaan aktif</div><div class="big">${done}<span style="font-size:.5em"> / ${tot} barang</span></div><div class="bar"><i style="transform:scaleX(${tot ? done / tot : 0})"></i></div></a>
           <div class="section stack">${list.map(o => `<a class="card tap row" href="#/${Calc.semuaDibeli(o) ? 'antar/' + o.id : 'belanja'}" style="text-decoration:none"><span class="grow"><span class="small mute">${E(dapurName(o))} · ${U.fmtDateShort(o.tanggal)}${o.jamAntar ? ' · ' + E(o.jamAntar) + ' WIT' : ''}</span><br><b>${E(o.items.map(i => i.nama).join(', '))}</b></span>${badge(o)}</a>`).join('')}</div>
-          <div class="section stack"><a class="btn primary block" href="#/belanja">${ic('cart')} Mulai belanja</a>
-          <div class="row"><button class="btn grow" data-act="terima">${ic('pkg')} Terima paket</button><button class="btn grow" data-act="kirim">${ic('send')} Kirim hasil</button></div></div>`
-        : `<div class="empty fade-in">${ic('basket')}<h3>Belum ada daftar belanja</h3><p>Xander mengirim paket daftar belanja lewat WhatsApp. Buka file itu di sini.</p><button class="btn primary" data-act="terima">${ic('pkg')} Terima paket</button></div>`}
-        ${selesaiHariIni.length ? `<div class="section"><div class="card ok"><b>${selesaiHariIni.length} pengantaran selesai hari ini</b><p class="small">Kerja bagus. Jangan lupa kirim hasil ke Xander.</p></div></div>` : ''}`,
+          <div class="section stack"><a class="btn primary block" href="#/belanja">${ic('cart')} Mulai belanja</a><a class="btn block" href="#/nota">${ic('upload')} Masukkan nota baru</a></div>`
+        : `<div class="empty fade-in">${ic('basket')}<h3>Belum ada daftar belanja</h3><p>Masukkan nota pesanan dari dapur. Daftar belanja muncul di sini dan invoice langsung jadi di HP Xander.</p><a class="btn primary" href="#/nota">${ic('upload')} Masukkan nota</a></div>`}
+        ${selesaiHariIni.length ? `<div class="section"><div class="card ok"><b>${selesaiHariIni.length} pengantaran selesai hari ini</b><p class="small">Kerja bagus. Semua sudah tercatat di HP Xander.</p></div></div>` : ''}`,
       mount: v => {
         $$('[data-act=terima]', v).forEach(b => b.onclick = () => receivePaket());
         const k = $('[data-act=kirim]', v); if (k) k.onclick = () => sendPaket(S.orders.filter(o => Calc.dibeli(o) || o.antar));
       }
     };
   };
+
+  /* ---------- Nota (Gilbert): area 3D peti di atas truk ---------- */
+  GV.nota = async () => {
+    const baru = S.orders.filter(o => o.createdBy === 'gil' && (o.createdAt || 0) > Date.now() - 2 * 864e5).slice(0, 6);
+    return {
+      html: `<div class="top"><div><h1>Masukkan nota</h1><p class="mute sub">Seret, pilih file, atau foto nota dari dapur. Invoice langsung jadi di HP Xander.</p></div></div>
+        <div data-stage-slot></div>
+        <div class="row wrap" style="margin-top:12px">
+          <button class="btn primary grow" data-act="file">${ic('file')} Pilih Excel atau foto</button>
+          <button class="btn grow" data-act="cam">${ic('camera')} Foto nota</button></div>
+        <p class="help" style="margin-top:8px">Paling akurat: file Excel asli atau screenshot. Foto layar yang miring sering salah terbaca.</p>
+        ${baru.length ? `<div class="section"><h2>Baru dimasukkan</h2><div class="stack">${baru.map(o => `<a class="card flat tap row" href="#/belanja" style="text-decoration:none"><span class="grow"><b>${E(dapurName(o))}</b><br><span class="small mute">${U.fmtDateLong(o.tanggal)} · ${o.items.length} barang</span></span>${badge(o)}</a>`).join('')}</div></div>` : ''}`,
+      mount: v => {
+        mountStage($('[data-stage-slot]', v));
+        $('[data-act=file]', v).onclick = async () => gilFiles(await pickFile('.xlsx,.xls,.csv,image/*', true));
+        $('[data-act=cam]', v).onclick = async () => {
+          const fs = await new Promise(res => { const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*'; i.capture = 'environment'; i.onchange = () => res([...i.files]); i.click(); });
+          gilFiles(fs);
+        };
+      }
+    };
+  };
+
+  /* area 3D dibuat sekali lalu dipindah-pindah, supaya tidak memuat ulang WebGL setiap data berubah */
+  function mountStage(slot) {
+    if (!S.sceneHost) {
+      const host = document.createElement('div');
+      host.className = 'stage3d'; host.tabIndex = 0; host.setAttribute('role', 'button');
+      host.setAttribute('aria-label', 'Area nota. Seret file nota ke sini, atau tekan Enter untuk memilih file.');
+      host.innerHTML = '<span class="st3d" data-st>Seret nota ke peti</span>';
+      S.sceneHost = host;
+      try { if (window.THREE && typeof Scene3D !== 'undefined') S.scene = Scene3D.create(host); } catch (e) { console.warn('3D tidak tersedia', e); }
+      if (!S.scene) host.classList.add('flat');
+      let depth = 0;
+      host.addEventListener('dragenter', e => { e.preventDefault(); if (depth++ === 0 && !S.scene?.busy) { S.scene?.hover(true); stageStatus('Lepaskan di peti'); } });
+      host.addEventListener('dragover', e => e.preventDefault());
+      host.addEventListener('dragleave', () => { if (--depth <= 0) { depth = 0; S.scene?.hover(false); if (!S.scene?.busy) stageStatus('Seret nota ke peti'); } });
+      host.addEventListener('drop', e => { e.preventDefault(); depth = 0; S.scene?.hover(false); gilFiles([...e.dataTransfer.files]); });
+      host.addEventListener('keydown', async e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); gilFiles(await pickFile('.xlsx,.xls,.csv,image/*', true)); } });
+    }
+    slot.replaceWith(S.sceneHost);
+  }
+  function stageStatus(t, cls = '') { const el = S.sceneHost?.querySelector('[data-st]'); if (el) { el.textContent = t; el.className = 'st3d ' + cls; } }
+  const short = n => (n || 'nota').length > 24 ? n.slice(0, 22) + '…' : (n || 'nota');
+
+  function pilihDapur() {
+    return new Promise(res => {
+      let chosen = '';
+      sheet(`<h2>Nota ini untuk dapur mana?</h2><p class="mute small" style="margin:6px 0 14px">Nama dapur tidak terbaca di nota.</p>
+        <div class="stack">${S.settings.dapur.map(d => `<button class="btn block" data-d="${d.id}">${E(d.nama)}</button>`).join('')}<button class="btn ghost block" data-close>Batal</button></div>`,
+        (el, close) => {
+          $$('[data-d]', el).forEach(b => b.onclick = () => { chosen = b.dataset.d; close(); });
+          const obs = new MutationObserver(() => { if (!el.isConnected) { obs.disconnect(); res(chosen); } });
+          obs.observe($('#sheet-root'), { childList: true });
+        });
+    });
+  }
+
+  let gilQueue = Promise.resolve();
+  function gilFiles(files) { (files || []).forEach(f => { gilQueue = gilQueue.then(() => gilOne(f)).catch(e => console.error(e)); }); }
+
+  async function gilOne(f) {
+    const sc = S.scene || { busy: false, receive: async () => {}, success: async () => {}, error: async () => {} };
+    const isImg = /^image\//.test(f.type) || /\.(jpe?g|png|webp|heic)$/i.test(f.name);
+    stageStatus('Memasukkan ' + short(f.name), 'busy');
+    await sc.receive();
+    let notas = [];
+    try {
+      if (isImg) {
+        const text = await OCR.read(f, p => stageStatus(`${p.status}${p.progress ? ' ' + Math.round(p.progress * 100) + '%' : ''}`, 'busy'));
+        const d = Parse.text(text, S.settings);
+        if (d.items.length) notas = [d];
+      } else {
+        stageStatus('Membaca Excel…', 'busy');
+        notas = await Parse.excel(f, S.settings);
+      }
+    } catch (e) { console.error(e); }
+    if (!notas.length) {
+      stageStatus('Nota belum terbaca. Coba Excel atau foto lebih jelas', 'err');
+      await sc.error();
+      setTimeout(() => !sc.busy && stageStatus('Seret nota ke peti'), 3200);
+      return;
+    }
+    let kirim = 0;
+    for (const n of notas) {
+      if (!n.dapurId) n.dapurId = await pilihDapur();
+      if (!n.dapurId) continue;
+      const dup = S.orders.find(o => o.dapurId === n.dapurId && o.tanggal === n.tanggal && o.items.map(i => U.normName(i.nama)).sort().join() === n.items.map(i => U.normName(i.nama)).sort().join());
+      if (dup && !(await confirmSheet({ title: 'Nota ini sepertinya sudah masuk', body: `${E(dapurName(dup))}, ${U.fmtDateLong(dup.tanggal)} dengan barang yang sama sudah ada. Tetap kirim lagi?`, ok: 'Tetap kirim', cancel: 'Lewati' }))) continue;
+      const dp = S.settings.dapur.find(x => x.id === n.dapurId);
+      const o = {
+        id: U.uid('o'), createdAt: Date.now(), createdBy: 'gil', autoInvoice: true, sumber: isImg ? 'foto' : 'excel',
+        dapurId: n.dapurId, tanggal: n.tanggal, jamAntar: n.jamAntar || dp?.jamAntar || '', noNota: n.noNota || '', totalNota: n.totalNota ?? null,
+        items: n.items.map(it => ({ id: U.uid('i'), nama: String(it.nama).trim(), satuan: String(it.satuan || '').trim(), qty: +it.qty || 0, hargaNota: +it.hargaNota || 0, jumlahNota: it.jumlahNota ?? undefined, cek: !!it.cek })),
+        log: [{ t: Date.now(), m: `Nota dimasukkan Gilbert (${isImg ? 'foto' : 'Excel'})` }]
+      };
+      if (Calc.selisihNota(o)) o.selisihOk = false;
+      await DB.orders.put(o, { newFromGil: true });
+      await DB.files.put({ id: U.uid('f'), orderId: o.id, kind: 'nota', name: f.name || 'nota', type: isImg ? 'image/jpeg' : f.type, blob: isImg ? await U.compressImage(f, 1600, .75) : f, t: Date.now() });
+      kirim++;
+    }
+    if (!kirim) { stageStatus('Tidak ada nota yang dikirim'); await sc.error(); return; }
+    stageStatus('Mengirim ke Xander…', 'busy');
+    await sc.success();
+    stageStatus(navigator.onLine ? `Terkirim ke Xander ✓${kirim > 1 ? ' (' + kirim + ' nota)' : ''}` : 'Tersimpan. Terkirim otomatis saat online', 'ok');
+    U.buzz([10, 40, 10]);
+    setTimeout(() => !sc.busy && stageStatus('Seret nota ke peti'), 2600);
+    scheduleRender();
+  }
 
   GV.belanja = async () => {
     const list = gilOrders().filter(o => !o.antar?.mulai);
@@ -720,9 +955,9 @@
             <span class="ck" data-quick role="checkbox" aria-checked="${!!(it.beli || it.kosong)}" aria-label="Centang ${E(it.nama)}">${ic('check')}</span>
             <span class="grow"><span class="nm">${E(it.nama)}</span><br><span class="meta">${U.fmtNum(it.qty)} ${E(it.satuan)}${it.qtyBeli != null && it.qtyBeli !== it.qty ? ` · dibeli ${U.fmtNum(it.qtyBeli)}` : ''}${it.kosong ? ' · kosong' : ''}</span></span>
             <span class="pr">${it.hargaBeli != null ? U.rp(it.hargaBeli) + '<br><span class="tiny mute">/' + E(it.satuan) + '</span>' : '<span class="mute small">isi harga</span>'}</span></div>`).join('')).join('')
-          + (done === tot ? `<div class="card ok section"><b>Semua barang sudah dibeli.</b><p class="small">Kirim hasil ke Xander supaya invoice bisa dibuat, lalu mulai antar.</p><div class="row wrap" style="margin-top:10px"><button class="btn primary grow" data-act="kirim">${ic('send')} Kirim ke Xander</button><a class="btn grow" href="#/antar">${ic('truck')} Antar</a></div></div>` : '')
+          + (done === tot ? `<div class="card ok section"><b>Semua barang sudah dibeli.</b><p class="small">Hasilnya sudah langsung masuk ke HP Xander. Sekarang waktunya antar.</p><div class="row wrap" style="margin-top:10px"><a class="btn primary grow" href="#/antar">${ic('truck')} Antar</a></div></div>` : '')
           + (speech ? `<div class="sticky-act" style="margin-top:16px"><button class="btn primary block" data-act="voice">${ic('mic')} Ucapkan belanjaan</button></div>` : '')
-        : `<div class="empty">${ic('cart')}<h3>Tidak ada yang perlu dibeli</h3><p>Terima paket dari Xander untuk mendapatkan daftar belanja baru.</p><button class="btn primary" data-act="terima">${ic('pkg')} Terima paket</button></div>`}`,
+        : `<div class="empty">${ic('cart')}<h3>Tidak ada yang perlu dibeli</h3><p>Masukkan nota pesanan dari dapur untuk membuat daftar belanja.</p><a class="btn primary" href="#/nota">${ic('upload')} Masukkan nota</a></div>`}`,
       mount: v => {
         $$('.item', v).forEach(el => {
           const o = S.orders.find(x => x.id === el.dataset.o), it = o.items[+el.dataset.i];
@@ -856,7 +1091,7 @@
             ${a.selesai ? `<p class="small" style="margin-top:6px">Diterima <b>${E(a.penerima || '-')}</b> pukul ${E(a.selesai)} WIT</p>${ttd ? `<img src="${URL.createObjectURL(ttd.blob)}" alt="Tanda tangan" style="width:100%;max-width:320px;background:#fff;border-radius:12px;margin-top:8px">` : ''}`
             : `<div class="field" style="margin-top:10px"><label class="lbl" for="pn">Nama penerima</label><input class="input" id="pn" value="${E(a.penerima || '')}" placeholder="Nama petugas dapur" autocomplete="name"></div>
               <canvas class="sign" aria-label="Area tanda tangan"></canvas><div class="row between" style="margin-top:6px"><span class="tiny mute">Tanda tangan di kotak</span><button class="btn ghost sm" data-act="clear">Hapus</button></div>`}</div>
-          ${!a.selesai ? `<button class="btn primary block" data-act="selesai">${ic('check')} Selesai, sudah sampai</button>` : `<div class="card ok"><b>Pengantaran selesai.</b><p class="small">Kirim hasil ke Xander supaya arsip lengkap.</p></div><button class="btn primary block" data-act="kirim">${ic('send')} Kirim hasil ke Xander</button>`}
+          ${!a.selesai ? `<button class="btn primary block" data-act="selesai">${ic('check')} Selesai, sudah sampai</button>` : `<div class="card ok"><b>Pengantaran selesai.</b><p class="small">Foto bukti dan tanda tangan sudah tersimpan di HP Xander.</p></div>`}
         </div>`,
       mount: v => {
         const save = async () => { o.antar = a; await DB.orders.put(o); };
@@ -906,10 +1141,10 @@
     try { theme = localStorage.getItem('theme') || 'auto'; hap = localStorage.getItem('haptic') ?? '1'; } catch (e) {}
     const f = (id, label, val, extra = '') => `<div class="field"><label class="lbl" for="${id}">${label}</label><input class="input" id="${id}" value="${E(val || '')}" ${extra}></div>`;
     return {
-      html: `<div class="top"><div><h1>Atur</h1><p class="mute sub">Perangkat ini dipakai oleh <b>${isX() ? 'Xander' : 'Gil'}</b></p></div></div>
+      html: `<div class="top"><div><h1>Atur</h1><p class="mute sub">Masuk sebagai <b>${isX() ? 'Xander' : 'Gilbert'}</b> · ${syncChip()}</p></div></div>
         <div class="card stack">
-          <div><span class="lbl">Pengguna perangkat ini</span><div class="seg" data-seg="role"><button data-v="xander" aria-pressed="${isX()}">Xander</button><button data-v="gil" aria-pressed="${!isX()}">Gil</button></div></div>
-          <div><span class="lbl">Tampilan</span><div class="seg" data-seg="theme"><button data-v="auto" aria-pressed="${theme === 'auto'}">Otomatis</button><button data-v="light" aria-pressed="${theme === 'light'}">Terang</button><button data-v="dark" aria-pressed="${theme === 'dark'}">Gelap</button></div><p class="help" style="margin-top:6px">Otomatis: terang untuk Gil di pasar, gelap untuk Xander.</p></div>
+          <button class="btn block" data-act="keluar">Keluar dari akun ${isX() ? 'Xander' : 'Gilbert'}</button>
+          <div><span class="lbl">Tampilan</span><div class="seg" data-seg="theme"><button data-v="auto" aria-pressed="${theme === 'auto'}">Otomatis</button><button data-v="light" aria-pressed="${theme === 'light'}">Terang</button><button data-v="dark" aria-pressed="${theme === 'dark'}">Gelap</button></div><p class="help" style="margin-top:6px">Otomatis: terang untuk Gilbert di pasar, gelap untuk Xander.</p></div>
           <label class="row between"><span class="lbl" style="margin:0">Getar saat mencentang</span><input type="checkbox" data-hap ${hap !== '0' ? 'checked' : ''} style="width:24px;height:24px;accent-color:var(--acc)"></label>
           <button class="btn block" data-install hidden>${ic('download')} Pasang aplikasi di perangkat ini</button>
         </div>
@@ -918,7 +1153,7 @@
           ${f('p-nama', 'Nama perusahaan', p.nama)}${f('p-badanHukum', 'Badan hukum', p.badanHukum)}${f('p-alamat', 'Alamat', p.alamat)}
           <div class="grid2">${f('p-telp', 'Telepon', p.telp, 'inputmode="tel"')}${f('p-email', 'Email', p.email, 'type="email"')}</div>
           <div class="grid2">${f('p-bank', 'Bank', p.bank, 'placeholder="Mandiri"')}${f('p-rekening', 'No. rekening', p.rekening, 'inputmode="numeric"')}</div>
-          ${f('p-atasNama', 'Atas nama rekening', p.atasNama)}<p class="help">Data rekening hanya tersimpan di perangkat ini, tidak ikut online.</p>
+          ${f('p-atasNama', 'Atas nama rekening', p.atasNama)}<p class="help">Rekening disimpan terkunci: hanya akun Xander yang bisa membacanya.</p>
           <div class="grid2">${f('p-penandatangan', 'Penanda tangan', p.penandatangan)}${f('p-jabatan', 'Jabatan', p.jabatan)}</div>
           ${f('p-kota', 'Kota (untuk tanggal invoice)', p.kota)}
         </div>
@@ -928,17 +1163,28 @@
           <div class="grid2">${f(`d${i}-kode`, 'Kode invoice', d.kode, 'maxlength="5" style="text-transform:uppercase"')}${f(`d${i}-jamAntar`, 'Jam antar biasa', d.jamAntar)}</div>
           ${f(`d${i}-wa`, 'WhatsApp dapur', d.wa, 'inputmode="tel" placeholder="0812…"')}
           ${f(`d${i}-kenali`, 'Kata kunci pengenal di nota', d.kenali)}<p class="help">Pisahkan dengan |. Dipakai untuk mengenali dapur otomatis dari nota.</p></div></details>`).join('')}
-        <h2 class="section">Kontak tim</h2><div class="card"><div class="grid2">${f('k-waXander', 'WhatsApp Xander', s.kontak.waXander, 'inputmode="tel"')}${f('k-waGil', 'WhatsApp Gil', s.kontak.waGil, 'inputmode="tel"')}</div></div>
-        <button class="btn primary block section" type="submit">${ic('check')} Simpan pengaturan</button></form>`
-        : `<div class="section card"><div class="grid2">${f('k-waXander', 'WhatsApp Xander', s.kontak.waXander, 'inputmode="tel"')}</div><button class="btn block" data-savewa>Simpan</button></div>`}
+        <h2 class="section">Kontak tim</h2><div class="card"><div class="grid2">${f('k-waXander', 'WhatsApp Xander', s.kontak.waXander, 'inputmode="tel"')}${f('k-waGil', 'WhatsApp Gilbert', s.kontak.waGil, 'inputmode="tel"')}</div></div>
+        <button class="btn primary block section" type="submit">${ic('check')} Simpan pengaturan</button></form>
+        <form class="section" data-pw><h2>Ganti kata kunci Xander</h2><div class="card">
+          <div class="field"><label class="lbl" for="pw-old">Kata kunci sekarang</label><input class="input" id="pw-old" type="password" autocomplete="current-password" required></div>
+          <div class="field"><label class="lbl" for="pw-new">Kata kunci baru</label><p class="help">Minimal 8 karakter, campuran huruf dan angka.</p><input class="input" id="pw-new" type="password" autocomplete="new-password" minlength="8" required></div>
+          <p class="err" data-pwerr hidden></p><button class="btn block" type="submit">Ganti kata kunci</button></div></form>`
+        : ''}
 
         <div class="section"><h2>Data</h2><div class="stack">
-          <button class="btn block" data-act="terima">${ic('pkg')} Terima paket atau pulihkan cadangan</button>
-          <button class="btn block" data-act="backup">${ic('download')} Unduh cadangan lengkap</button>
-          <button class="btn danger block" data-act="wipe">${ic('trash')} Hapus semua data di perangkat ini</button>
-        </div><p class="tiny mute" style="margin-top:12px">Chreswill MBG versi 1.1 · data tersimpan di perangkat ini dan tetap bisa dipakai tanpa internet.</p></div>`,
+          ${isX() ? `<button class="btn block" data-act="backup">${ic('download')} Unduh cadangan lengkap</button><button class="btn block" data-act="terima">${ic('upload')} Pulihkan dari cadangan</button>` : ''}
+          <button class="btn danger block" data-act="wipe">${ic('trash')} Keluar dan hapus salinan di perangkat ini</button>
+        </div><p class="tiny mute" style="margin-top:12px">Chreswill MBG versi 2.0 · data tersinkron real time antara HP Xander dan Gilbert, tetap bisa dipakai saat offline lalu terkirim otomatis saat online.</p></div>`,
       mount: v => {
-        $$('[data-seg=role] button', v).forEach(b => b.onclick = () => { S.role = b.dataset.v; try { localStorage.setItem('role', S.role); } catch (e) {} go('#/beranda'); });
+        $('[data-act=keluar]', v).onclick = async () => { if (await confirmSheet({ title: 'Keluar dari akun?', body: isX() ? 'Untuk masuk lagi perlu kata kunci Xander.' : 'Masuk lagi cukup dengan memilih Gilbert.', ok: 'Keluar' })) { await DB.auth.out(); location.hash = ''; } };
+        const pwf = $('[data-pw]', v);
+        if (pwf) pwf.onsubmit = async e => {
+          e.preventDefault();
+          const er = $('[data-pwerr]', v), nw = $('#pw-new', v).value;
+          if (nw.length < 8 || !/\d/.test(nw) || !/[a-z]/i.test(nw)) { er.textContent = 'Kata kunci baru minimal 8 karakter dan berisi huruf serta angka.'; er.hidden = false; return; }
+          try { await DB.auth.changePassword($('#pw-old', v).value, nw); pwf.reset(); er.hidden = true; U.toast('Kata kunci diganti', 'ok'); }
+          catch (x) { er.textContent = /wrong-password|invalid-credential/.test(x.code || '') ? 'Kata kunci sekarang salah.' : 'Belum bisa mengganti: ' + (x.message || x.code); er.hidden = false; }
+        };
         $$('[data-seg=theme] button', v).forEach(b => b.onclick = () => { try { localStorage.setItem('theme', b.dataset.v); } catch (e) {} render(); });
         $('[data-hap]', v).onchange = e => { try { localStorage.setItem('haptic', e.target.checked ? '1' : '0'); } catch (er) {} U.buzz(); };
         const ins = $('[data-install]', v);
@@ -952,13 +1198,11 @@
           s.kontak.waXander = val('k-waXander'); s.kontak.waGil = val('k-waGil');
           await DB.saveSettings(s); U.toast('Pengaturan disimpan', 'ok'); U.buzz(); render();
         };
-        const sw = $('[data-savewa]', v);
-        if (sw) sw.onclick = async () => { s.kontak.waXander = $('#k-waXander', v).value.trim(); await DB.saveSettings(s); U.toast('Disimpan', 'ok'); };
-        $('[data-act=terima]', v).onclick = () => receivePaket();
-        $('[data-act=backup]', v).onclick = async () => { const f2 = await Sync.backup(); U.download(f2, f2.name); U.toast('Cadangan diunduh', 'ok'); };
+        const t1 = $('[data-act=terima]', v); if (t1) t1.onclick = () => receivePaket();
+        const b1 = $('[data-act=backup]', v); if (b1) b1.onclick = async () => { const f2 = await Sync.backup(); U.download(f2, f2.name); U.toast('Cadangan diunduh', 'ok'); };
         $('[data-act=wipe]', v).onclick = async () => {
-          if (!(await confirmSheet({ title: 'Hapus semua data?', body: 'Semua permintaan, invoice, foto, dan pengaturan di perangkat ini terhapus. Unduh cadangan dulu kalau perlu.', ok: 'Hapus semua', danger: true }))) return;
-          await DB.wipe(); try { localStorage.removeItem('role'); } catch (e) {} S.role = null; U.toast('Semua data dihapus'); go('#/');
+          if (!(await confirmSheet({ title: 'Keluar dan hapus salinan?', body: 'Salinan data di perangkat ini dihapus. Data online tetap aman dan muncul lagi setelah masuk.', ok: 'Keluar dan hapus', danger: true }))) return;
+          await DB.wipe(); U.toast('Salinan di perangkat ini dihapus'); setTimeout(() => location.replace(location.pathname), 400);
         };
       }
     };
@@ -972,8 +1216,14 @@
   window.addEventListener('offline', () => U.toast('Offline. Aplikasi tetap bisa dipakai.', 'warn'));
   // file yang dibuka lewat "Buka dengan" (Android, bila didukung)
   if ('launchQueue' in window) window.launchQueue.setConsumer(async p => { if (p.files?.length) receivePaket(await Promise.all(p.files.map(h => h.getFile()))); });
-  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW', e));
+  if ('serviceWorker' in navigator && location.protocol !== 'file:' && location.hostname !== 'localhost') navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW', e));
   DB.persist();
-  render().catch(e => { console.error(e); $('#view').innerHTML = `<div class="empty"><h3>Aplikasi gagal dimuat</h3><p>${E(e.message)}</p></div>`; });
-  window.ChreswillApp = { render, S, importFiles };
+  $('#view').innerHTML = '<div class="welcome"><div class="box"><div class="progress"><i style="transform:scaleX(.6)"></i></div><p class="mute small" style="margin-top:10px">Menyambungkan…</p></div></div>';
+  DB.init().then(() => render()).catch(e => { console.error(e); $('#view').innerHTML = `<div class="empty"><h3>Aplikasi gagal dimuat</h3><p>${E(e.message)}</p></div>`; });
+  DB.onChange(e => {
+    if (e.type === 'auth') { Auto.seen = null; render().then(autoRun); return; }
+    if (e.type === 'status') { $$('[data-sync]').forEach(el => el.outerHTML = syncChip()); return; }
+    if (e.type === 'data') { scheduleRender(); if (isX()) setTimeout(autoRun, 200); }
+  });
+  window.ChreswillApp = { render, S, importFiles, autoRun };
 })();

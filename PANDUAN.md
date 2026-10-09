@@ -1,26 +1,30 @@
-# Panduan Chreswill MBG — Tahap 1
+# Panduan Chreswill MBG — Versi 2.0 (real time)
 
-## Membuka aplikasi
-- **Di laptop (Windows):** klik dua kali `Buka-Aplikasi.bat`. Browser akan terbuka di `http://localhost:5180`. Biarkan jendela hitam tetap terbuka selama aplikasi dipakai.
-- **Di HP:** aplikasi perlu dipasang di alamat web online (https), misalnya GitHub Pages yang gratis. Setelah dibuka sekali, pilih menu **Atur > Pasang aplikasi** supaya muncul ikon di layar HP dan bisa dipakai tanpa internet.
+Alamat: https://cassanovaseven.github.io/chreswill-mbg/
+
+## Masuk
+- **Xander:** pilih Xander, lalu ketik kata kunci. Hanya akun ini yang bisa melihat harga, invoice, keuntungan, dan rekening.
+- **Gilbert:** cukup pilih Gilbert, tanpa kata kunci.
+- Pasang di HP lewat Chrome, menu **⋮ → Tambahkan ke layar utama**.
 
 ## Alur harian
-1. **Xander → Permintaan:** tarik file Excel nota, foto nota, atau ketik sendiri. Aplikasi:
-   - mengenali dapur, tanggal, nomor nota, dan barang,
-   - **menghitung ulang total** dan memberi tanda kalau total di nota salah,
-   - memberi warna oranye pada baris foto yang kurang jelas terbaca.
-2. **Xander → Kirim ke Gil:** paket dikirim lewat WhatsApp. Harga jual tidak ikut terkirim.
-3. **Gil → Terima paket → Belanja:**
-   - ketuk barang untuk mengisi harga beli dan jumlah yang dibeli,
-   - ketuk kotak untuk centang cepat,
-   - tombol **Barang kosong** untuk barang yang tidak ada di pasar.
-4. **Gil → Antar:** tekan Mulai antar, ambil foto bukti, isi nama penerima dan tanda tangannya, lalu tekan Selesai. Setelah itu tekan **Kirim hasil ke Xander**.
-5. **Xander → Terima paket → Buat invoice:** PDF dan Excel dibuat otomatis sesuai template CV. Nomor invoice mengikuti pola tanggal/kode dapur/bulan/tahun, contohnya 02/ERI/10/26 dan 05/TM/10/26. Lalu tekan Bagikan untuk mengirim ke WhatsApp, Gmail, atau Drive.
-6. **Xander → Arsip → ZIP:** satu file berisi nota asli, nota rapi (Excel), invoice, foto bukti, dan tanda tangan. Susunannya per tahun / bulan / tanggal / dapur.
+1. **Gilbert → Nota:** seret file atau foto nota ke **peti di atas truk** (area 3D), atau tekan "Pilih Excel atau foto" / "Foto nota".
+   - Peti terbuka, file masuk, lalu peti bercahaya selama nota dibaca.
+   - Setelah terbaca, cahaya memancar dan truk membawa nota ke Xander.
+   - Harga **tidak** tampil di HP Gilbert.
+2. **HP Xander (otomatis, ±1–2 detik):** invoice PDF sesuai template langsung jadi, disertai bunyi dan notifikasi. Nomornya contohnya `02/ERI/10/26`.
+3. **Gilbert → Belanja:** centang barang dan isi harga beli. Kalau qty yang dibeli berubah atau ada barang kosong, **invoice di HP Xander ikut diperbarui otomatis** (selama belum ditandai lunas).
+4. **Gilbert → Antar:** ambil foto bukti, isi nama penerima, minta tanda tangan, lalu tekan Selesai. Semuanya langsung tersimpan di HP Xander.
+5. **Xander → Invoice:** tekan Bagikan untuk mengirim ke WhatsApp atau Gmail. Tandai Lunas setelah dibayar.
+6. **Xander → Arsip:** unduh ZIP per hari, lalu simpan di Google Drive.
 
-## Penting
-- Data tersimpan **di perangkat masing-masing**. Unduh **Cadangan lengkap** (menu Arsip) secara rutin dan simpan di Google Drive.
-- Harga jual awalnya sama dengan harga di nota. Xander bisa mengubahnya di halaman permintaan.
-- **Pertama kali di HP/laptop Xander:** isi Bank, No Rekening, dan Atas Nama di menu **Atur**. Data rekening sengaja tidak ditulis di kode aplikasi online, jadi hanya tersimpan di perangkat Xander.
-- Isi juga nomor WhatsApp Xander, Gil, dan dapur supaya tombol WhatsApp muncul.
-- Foto layar yang miring atau silau sering salah terbaca. Hasil paling akurat dari **file Excel asli** atau **tangkapan layar (screenshot)**.
+## Offline
+Tanpa sinyal, aplikasi tetap bisa dipakai. Status di pojok berubah menjadi "Offline", dan data otomatis terkirim begitu ada sinyal. **Masuk pertama kali** butuh internet.
+
+## Pertama kali di HP Xander
+- Buka **Atur**, isi Bank, No Rekening, dan Atas Nama, lalu Simpan. Data ini terkunci, hanya akun Xander yang bisa membacanya.
+- Di Beranda, tekan **Aktifkan notifikasi**.
+- Ganti kata kunci kapan saja di **Atur → Ganti kata kunci Xander**.
+
+## Server
+Firebase proyek `chreswill-mbg` (akun Google apocryphaf1@gmail.com, paket gratis Spark, server Jakarta).

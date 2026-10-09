@@ -80,7 +80,6 @@ const Sync = (() => {
     return new File([JSON.stringify(pk)], `Cadangan-Chreswill-${U.today()}.chreswill.json`, { type: 'application/json' });
   }
   async function restore(pk) {
-    await DB.wipe();
     await DB.saveSettings(pk.settings);
     for (const o of pk.orders) await DB.orders.put(o);
     for (const f of await jsonToFiles(pk.files)) await DB.files.put(f);
