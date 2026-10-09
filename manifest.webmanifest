@@ -1,0 +1,25 @@
+{
+  "name": "Chreswill MBG",
+  "short_name": "Chreswill",
+  "description": "Permintaan belanja, daftar belanja, invoice, pengantaran, dan arsip untuk CV Chreswill Pentra Abadi.",
+  "lang": "id",
+  "start_url": "./index.html#/beranda",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#EEF6E2",
+  "theme_color": "#1B1236",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "file_handlers": [
+    { "action": "./index.html", "accept": { "application/json": [".json"] } }
+  ],
+  "share_target": {
+    "action": "./index.html",
+    "method": "GET",
+    "params": { "title": "title", "text": "text" }
+  }
+}
