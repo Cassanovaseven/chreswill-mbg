@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Contoh Area 3D</title>
+<style>
+@font-face{font-family:"PJS";src:url(fonts/pjs-500.woff2) format("woff2");font-weight:500}
+@font-face{font-family:"PJS";src:url(fonts/pjs-800.woff2) format("woff2");font-weight:800}
+:root{--bg:#EEF6E2;--ink:#1B1236;--tosca:#2EE6C5;--wortel:#FF8A1F;--mute:#55536A;--card:#fff;--ease:cubic-bezier(.23,1,.32,1)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:500 15px/1.5 "PJS",system-ui,sans-serif;-webkit-tap-highlight-color:transparent}
+header{max-width:1180px;margin:0 auto;padding:28px 16px 8px}
+h1{font-size:26px;font-weight:800;margin:0 0 4px;letter-spacing:-.01em}
+p.sub{margin:0;color:var(--mute)}
+.grid{max-width:1180px;margin:0 auto;padding:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px}
+.opt{background:var(--card);border:1.5px solid var(--ink);border-radius:18px;box-shadow:2px 2px 0 var(--ink);overflow:hidden;display:flex;flex-direction:column}
+.stage{position:relative;height:380px;background:radial-gradient(120% 90% at 50% 20%,#FFFFFF 0%,#E3F4D6 60%,#D3EBC2 100%);touch-action:none;cursor:pointer;outline:none}
+.stage canvas{display:block;width:100%;height:100%}
+.stage.over{box-shadow:inset 0 0 0 4px var(--tosca)}
+.stage:focus-visible{box-shadow:inset 0 0 0 4px var(--ink)}
+.status{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);background:var(--ink);color:#F3EEFF;border-radius:999px;padding:8px 16px;font-size:14px;white-space:nowrap;pointer-events:none;transition:background-color 200ms ease,color 200ms ease}
+.status.done{background:var(--tosca);color:var(--ink)}
+.status.busy::before{content:"";display:inline-block;width:12px;height:12px;margin-right:8px;vertical-align:-1px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.tag{position:absolute;top:14px;left:14px;background:#fff;border:1.5px solid var(--ink);border-radius:999px;padding:2px 12px;font-weight:800;font-size:13px}
+.body{padding:14px 16px 16px;display:flex;flex-direction:column;gap:10px;flex:1}
+.body h2{margin:0;font-size:18px;font-weight:800}
+.body p{margin:0;color:var(--mute);font-size:14px}
+.row{display:flex;gap:8px;margin-top:auto}
+button{font:inherit;font-weight:800;min-height:46px;border-radius:14px;border:1.5px solid var(--ink);background:#fff;color:var(--ink);padding:0 14px;cursor:pointer;flex:1;transition:transform 140ms var(--ease)}
+button:active{transform:scale(.97)}
+button.pri{background:var(--ink);color:var(--tosca)}
+footer{max-width:1180px;margin:0 auto;padding:4px 16px 40px;color:var(--mute);font-size:13px}
+@media (prefers-reduced-motion:reduce){.status.busy::before{animation:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Pilih area 3D untuk Gilbert</h1>
+  <p class="sub">Tarik file nota (foto atau Excel) ke salah satu area, atau tekan "Coba". Bisa juga diputar dengan jari atau mouse.</p>
+</header>
+
+<main class="grid">
+  <section class="opt" data-scene="keranjang">
+    <div class="stage" tabindex="0" aria-label="Area 3D keranjang pasar. Tarik file nota ke sini."><span class="tag">A</span><span class="status">Tarik file nota ke sini</span></div>
+    <div class="body"><h2>Keranjang pasar</h2><p>File dilempar ke keranjang, lalu bahan-bahan melompat keluar sebelum berubah jadi daftar belanja.</p>
+      <div class="row"><button class="pri" data-try>Coba</button><button data-file>Pilih file</button></div></div>
+  </section>
+  <section class="opt" data-scene="peti">
+    <div class="stage" tabindex="0" aria-label="Area 3D peti kayu. Tarik file nota ke sini."><span class="tag">B</span><span class="status">Tarik file nota ke sini</span></div>
+    <div class="body"><h2>Peti kayu bercahaya</h2><p>Tutup peti terbuka saat file didekatkan, menelan file, lalu memancarkan cahaya tosca ke Xander.</p>
+      <div class="row"><button class="pri" data-try>Coba</button><button data-file>Pilih file</button></div></div>
+  </section>
+  <section class="opt" data-scene="truk">
+    <div class="stage" tabindex="0" aria-label="Area 3D truk pengantar. Tarik file nota ke sini."><span class="tag">C</span><span class="status">Tarik file nota ke sini</span></div>
+    <div class="body"><h2>Truk pengantar</h2><p>File dimuat ke bak truk, lalu truk melaju keluar layar membawanya ke Xander.</p>
+      <div class="row"><button class="pri" data-try>Coba</button><button data-file>Pilih file</button></div></div>
+  </section>
+</main>
+<footer>Contoh tampilan saja: file tidak dibaca dan tidak dikirim ke mana pun.</footer>
+
+<script src="vendor/three.min.js"></script>
+<script>
+(() => {
+const T = THREE;
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const C = { tosca: 0x2EE6C5, ink: 0x1B1236, wortel: 0xFF8A1F, daun: 0xEEF6E2, red: 0xE5484D, green: 0x3FA34D, cream: 0xFFF3DC, wood: 0xC98B4A, woodDark: 0x8A5A2B, white: 0xffffff };
+const easeOut = p => 1 - Math.pow(1 - p, 3);
+const easeInOut = p => p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+const spring = p => 1 - Math.exp(-6 * p) * Math.cos(12 * p); // pantulan teredam
+const mat = (color, o = {}) => new T.MeshStandardMaterial({ color, roughness: .75, metalness: 0, flatShading: true, ...o });
+
+function canvasTex(w, h, draw) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace; t.anisotropy = 4; return t;
+}
+/* kartu "file nota" */
+function makeDoc() {
+  const tex = canvasTex(256, 340, (g, w, h) => {
+    g.fillStyle = '#fff'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#2EE6C5'; g.fillRect(0, 0, w, 54);
+    g.fillStyle = '#1B1236'; g.font = 'bold 26px sans-serif'; g.fillText('NOTA', 20, 37);
+    g.fillStyle = '#D3D1C7'; for (let i = 0; i < 7; i++) g.fillRect(20, 84 + i * 32, i % 3 === 2 ? 130 : 210, 12);
+    g.fillStyle = '#FF8A1F'; g.fillRect(20, 300, 90, 16);
+  });
+  const m = new T.Mesh(new T.BoxGeometry(.9, 1.2, .03), [mat(C.white), mat(C.white), mat(C.white), mat(C.white), new T.MeshStandardMaterial({ map: tex, roughness: .6 }), mat(0xEDEDED)]);
+  return m;
+}
+function shadowBlob(r = 1.6) {
+  const tex = canvasTex(128, 128, (g, w) => { const gr = g.createRadialGradient(w / 2, w / 2, 0, w / 2, w / 2, w / 2); gr.addColorStop(0, 'rgba(27,18,54,.35)'); gr.addColorStop(1, 'rgba(27,18,54,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, w); });
+  const m = new T.Mesh(new T.PlaneGeometry(r * 2, r * 2), new T.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2; m.position.y = .01; return m;
+}
+
+/* ---------- kerangka satu panggung ---------- */
+function Stage(el, build) {
+  const renderer = new T.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.outputColorSpace = T.SRGBColorSpace;
+  el.prepend(renderer.domElement);
+  const scene = new T.Scene();
+  const camera = new T.PerspectiveCamera(35, 1, .1, 100);
+  camera.position.set(0, 3.4, 8.2); camera.lookAt(0, .9, 0);
+  scene.add(new T.HemisphereLight(0xffffff, 0xB9DDA8, 1.6));
+  const sun = new T.DirectionalLight(0xffffff, 1.8); sun.position.set(4, 8, 5); scene.add(sun);
+  const root = new T.Group(); scene.add(root);
+  const tweens = [];
+  const S = { el, scene, camera, root, renderer, tweens, now: 0, busy: false, over: false,
+    tween(dur, fn, done) { return new Promise(res => tweens.push({ t0: S.now, dur: RM ? Math.min(dur, 200) : dur, fn, done: () => { done && done(); res(); } })); },
+    wait(ms) { return S.tween(ms, () => {}); },
+    status(txt, cls = '') { const s = el.querySelector('.status'); s.textContent = txt; s.className = 'status ' + cls; }
+  };
+  const api = build(S);
+  // putar dengan jari/mouse, kembali pelan seperti pegas
+  let drag = null, rotY = 0, rotV = 0, tiltX = 0;
+  el.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, r: rotY }; el.setPointerCapture(e.pointerId); });
+  el.addEventListener('pointermove', e => { if (!drag) return; rotY = drag.r + (e.clientX - drag.x) * .012; tiltX = Math.max(-.25, Math.min(.25, (e.clientY - drag.y) * .004)); });
+  el.addEventListener('pointerup', () => { drag = null; });
+  el.addEventListener('pointercancel', () => { drag = null; });
+
+  function resize() { const r = el.getBoundingClientRect(); renderer.setSize(r.width, r.height, false); camera.aspect = r.width / r.height; camera.fov = r.width < 360 ? 40 : 35; camera.updateProjectionMatrix(); }
+  new ResizeObserver(resize).observe(el); resize();
+
+  let visible = true, last = performance.now();
+  new IntersectionObserver(es => { visible = es[0].isIntersecting; }).observe(el);
+  function loop(t) {
+    requestAnimationFrame(loop);
+    if (!visible) { last = t; return; }
+    const dt = Math.min(.05, (t - last) / 1000); last = t; S.now = t;
+    for (let i = tweens.length - 1; i >= 0; i--) { const w = tweens[i], p = Math.min(1, (t - w.t0) / w.dur); w.fn(p); if (p >= 1) { tweens.splice(i, 1); w.done(); } }
+    if (!drag) { rotV += (0 - rotY) * dt * 6; rotV *= .86; rotY += rotV * dt * 10; tiltX *= .9; }
+    root.rotation.y = rotY + (RM ? 0 : Math.sin(t / 2400) * .18); root.rotation.x = tiltX;
+    api.update && api.update(dt, t / 1000);
+    renderer.render(scene, camera);
+  }
+  requestAnimationFrame(loop);
+
+  // tarik-lepas file
+  el.addEventListener('dragenter', e => { e.preventDefault(); if (!S.busy) { el.classList.add('over'); S.over = true; api.hover && api.hover(true); S.status('Lepaskan di sini'); } });
+  el.addEventListener('dragover', e => e.preventDefault());
+  el.addEventListener('dragleave', e => { if (e.target === el || !el.contains(e.relatedTarget)) { el.classList.remove('over'); S.over = false; api.hover && api.hover(false); if (!S.busy) S.status('Tarik file nota ke sini'); } });
+  el.addEventListener('drop', e => { e.preventDefault(); el.classList.remove('over'); S.over = false; const f = e.dataTransfer.files[0]; run(f ? f.name : 'nota'); });
+  el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); run('nota-contoh.xlsx'); } });
+  async function run(name) {
+    if (S.busy) return; S.busy = true;
+    try { navigator.vibrate && navigator.userActivation?.hasBeenActive && navigator.vibrate(12); } catch (e) {}
+    S.status('Membaca ' + (name.length > 22 ? name.slice(0, 20) + '…' : name), 'busy');
+    await api.drop();
+    try { navigator.vibrate && navigator.userActivation?.hasBeenActive && navigator.vibrate([10, 40, 10]); } catch (e) {}
+    S.status('Terkirim ke Xander ✓', 'done');
+    await S.wait(1800); await (api.reset ? api.reset() : null);
+    S.status('Tarik file nota ke sini'); S.busy = false;
+  }
+  return { run };
+}
+
+/* ---------- A. Keranjang pasar ---------- */
+function keranjang(S) {
+  const g = new T.Group(); S.root.add(g); S.root.add(shadowBlob(1.9));
+  const weave = canvasTex(256, 128, (c, w, h) => {
+    c.fillStyle = '#C98B4A'; c.fillRect(0, 0, w, h);
+    for (let y = 0; y < h; y += 16) for (let x = 0; x < w; x += 32) { c.fillStyle = (x / 32 + y / 16) % 2 ? '#B5773A' : '#D9A066'; c.fillRect(x, y, 30, 14); }
+  });
+  weave.wrapS = weave.wrapT = T.RepeatWrapping; weave.repeat.set(4, 2);
+  const prof = [[.0, 0], [.85, 0], [.95, .05], [1.12, .9], [1.22, 1.15]].map(([x, y]) => new T.Vector2(x, y));
+  const body = new T.Mesh(new T.LatheGeometry(prof, 28), new T.MeshStandardMaterial({ map: weave, side: T.DoubleSide, roughness: .9 }));
+  const rim = new T.Mesh(new T.TorusGeometry(1.22, .08, 10, 40), mat(C.woodDark));
+  rim.rotation.x = Math.PI / 2; rim.position.y = 1.15;
+  const rimMat = rim.material;
+  const handle = new T.Mesh(new T.TorusGeometry(1.0, .07, 8, 30, Math.PI), mat(C.woodDark)); handle.position.y = 1.15;
+  const basket = new T.Group(); basket.add(body, rim, handle); g.add(basket);
+
+  // bahan-bahan
+  const items = [];
+  const add = (mesh, color) => { mesh.visible = false; g.add(mesh); items.push({ m: mesh, v: new T.Vector3(), base: new T.Vector3() }); return mesh; };
+  const tomat = new T.Group(); tomat.add(new T.Mesh(new T.SphereGeometry(.28, 14, 10), mat(C.red)), (() => { const m = new T.Mesh(new T.ConeGeometry(.09, .1, 5), mat(C.green)); m.position.y = .28; return m; })()); add(tomat);
+  const cabai = new T.Mesh(new T.ConeGeometry(.09, .7, 8), mat(C.red)); cabai.rotation.z = 2.5; add(cabai);
+  const telur = new T.Mesh(new T.SphereGeometry(.2, 14, 10), mat(C.cream)); telur.scale.y = 1.3; add(telur);
+  const wortel = new T.Mesh(new T.ConeGeometry(.12, .7, 8), mat(C.wortel)); wortel.rotation.z = -2.6; add(wortel);
+  const daun = new T.Mesh(new T.SphereGeometry(.3, 10, 6), mat(C.green)); daun.scale.set(1, .25, .6); add(daun);
+  const tomat2 = tomat.clone(); add(tomat2);
+
+  const doc = makeDoc(); doc.visible = false; S.root.add(doc);
+  let squash = 1;
+  return {
+    hover(on) { rimMat.emissive = new T.Color(on ? C.tosca : 0); rimMat.emissiveIntensity = on ? .9 : 0; S.tween(260, p => basket.scale.setScalar(on ? 1 + .08 * easeOut(p) : 1.08 - .08 * easeOut(p))); },
+    update(dt, t) {
+      if (!S.busy) basket.position.y = RM ? 0 : Math.sin(t * 2) * .03;
+      basket.scale.y = (S.over ? 1.08 : 1) * squash; basket.scale.x = basket.scale.z = (S.over ? 1.08 : 1) * (2 - squash);
+      for (const it of items) if (it.fly) {
+        it.v.y -= 9.8 * dt; it.m.position.addScaledVector(it.v, dt); it.m.rotation.x += dt * 4; it.m.rotation.z += dt * 3;
+        if (it.m.position.y < .25 && it.v.y < 0) { it.m.position.y = .25; it.v.y *= -.45; it.v.x *= .7; it.v.z *= .7; }
+      }
+    },
+    async drop() {
+      this.hover && rimMat.emissive && (rimMat.emissiveIntensity = 0);
+      doc.visible = true;
+      await S.tween(700, p => { const e = easeInOut(p); doc.position.set(-3 + 3 * e, 3.6 - 2.2 * e + Math.sin(p * Math.PI) * 1.2, 1 - e); doc.rotation.set(-1.2 * e, 2 * e, .6 - .6 * e); doc.scale.setScalar(1 - .5 * e); });
+      doc.visible = false;
+      await S.tween(500, p => { squash = 1 - .18 * Math.sin(p * Math.PI) * (1 - p); });
+      squash = 1;
+      items.forEach((it, i) => { const a = i / items.length * Math.PI * 2; it.m.visible = true; it.m.position.set(0, 1, 0); it.v.set(Math.cos(a) * 1.6, 5.2 + Math.random(), Math.sin(a) * 1.6); it.fly = true; });
+      await S.wait(1500);
+    },
+    async reset() {
+      const from = items.map(it => it.m.position.clone());
+      items.forEach(it => it.fly = false);
+      await S.tween(450, p => items.forEach((it, i) => { it.m.position.lerpVectors(from[i], new T.Vector3(0, 1, 0), easeInOut(p)); it.m.scale.setScalar(1 - p); }));
+      items.forEach(it => { it.m.visible = false; it.m.scale.setScalar(1); });
+    }
+  };
+}
+
+/* ---------- B. Peti kayu bercahaya ---------- */
+function peti(S) {
+  const g = new T.Group(); S.root.add(g); S.root.add(shadowBlob(2));
+  const plank = canvasTex(256, 256, (c, w, h) => {
+    for (let i = 0; i < 4; i++) { c.fillStyle = ['#C98B4A', '#BD7F3F', '#D39556', '#C3843F'][i]; c.fillRect(0, i * 64, w, 62); c.fillStyle = '#8A5A2B'; c.fillRect(0, i * 64 + 62, w, 2); }
+    c.strokeStyle = '#8A5A2B'; c.lineWidth = 14; c.strokeRect(7, 7, w - 14, h - 14);
+    c.beginPath(); c.moveTo(14, 14); c.lineTo(w - 14, h - 14); c.stroke();
+  });
+  const wm = new T.MeshStandardMaterial({ map: plank, roughness: .85 });
+  const W = 2.2, H = 1.3, D = 1.5, t = .08;
+  const box = new T.Group();
+  const wall = (w, h, d, x, y, z) => { const m = new T.Mesh(new T.BoxGeometry(w, h, d), wm); m.position.set(x, y, z); box.add(m); };
+  wall(W, t, D, 0, t / 2, 0); wall(W, H, t, 0, H / 2, D / 2); wall(W, H, t, 0, H / 2, -D / 2); wall(t, H, D, W / 2, H / 2, 0); wall(t, H, D, -W / 2, H / 2, 0);
+  g.add(box);
+  const inner = new T.Mesh(new T.PlaneGeometry(W - .2, D - .2), new T.MeshBasicMaterial({ color: C.tosca, transparent: true, opacity: 0 }));
+  inner.rotation.x = -Math.PI / 2; inner.position.y = H - .05; g.add(inner);
+  const glow = new T.PointLight(C.tosca, 0, 6); glow.position.set(0, H * .7, 0); g.add(glow);
+  // tutup berengsel di sisi belakang
+  const hinge = new T.Group(); hinge.position.set(0, H, -D / 2); g.add(hinge);
+  const lid = new T.Mesh(new T.BoxGeometry(W + .1, t * 1.4, D + .1), wm); lid.position.set(0, t * .7, D / 2); hinge.add(lid);
+  // pancaran cahaya
+  const beam = new T.Mesh(new T.CylinderGeometry(.35, .9, 6, 24, 1, true), new T.MeshBasicMaterial({ color: C.tosca, transparent: true, opacity: 0, side: T.DoubleSide, blending: T.AdditiveBlending, depthWrite: false }));
+  beam.position.y = H + 3; g.add(beam);
+  const doc = makeDoc(); doc.visible = false; S.root.add(doc);
+  let open = 0, openTarget = 0, hop = 0;
+  const setGlow = v => { glow.intensity = v * 6; inner.material.opacity = v * .7; };
+  return {
+    hover(on) { openTarget = on ? 1 : 0; },
+    update(dt, t) {
+      const idle = S.busy || RM ? 0 : (Math.sin(t * 1.3) > .95 ? .08 : 0);
+      open += ((openTarget || idle) - open) * Math.min(1, dt * 9);
+      hinge.rotation.x = -open * 1.9;
+      if (!S.busy) setGlow(open * .8);
+      g.position.y = hop;
+    },
+    async drop() {
+      openTarget = 1; await S.wait(250);
+      doc.visible = true;
+      await S.tween(650, p => { const e = easeInOut(p); doc.position.set(0, 3.8 - 3.2 * e, .3 - .3 * e); doc.rotation.set(-Math.PI / 2 * e, .4 * (1 - e), 0); doc.scale.setScalar(1 - .35 * e); });
+      doc.visible = false; openTarget = 0;
+      await S.tween(300, p => setGlow(1));
+      await S.tween(520, p => { hop = Math.sin(p * Math.PI) * .45; g.scale.set(1 + .06 * Math.sin(p * Math.PI * 2), 1 - .06 * Math.sin(p * Math.PI * 2), 1); });
+      g.scale.set(1, 1, 1);
+      await S.tween(900, p => { beam.material.opacity = Math.sin(p * Math.PI) * .55; beam.scale.set(1, .2 + p, 1); setGlow(1 - p * .6); });
+      beam.material.opacity = 0;
+    },
+    async reset() { await S.tween(300, p => setGlow(.4 * (1 - p))); }
+  };
+}
+
+/* ---------- C. Truk pengantar ---------- */
+function truk(S) {
+  const g = new T.Group(); S.root.add(g);
+  const road = canvasTex(512, 64, (c, w, h) => { c.fillStyle = '#3A3256'; c.fillRect(0, 0, w, h); c.fillStyle = '#F3EEFF'; for (let x = 0; x < w; x += 64) c.fillRect(x + 8, h / 2 - 3, 36, 6); });
+  road.wrapS = T.RepeatWrapping; road.repeat.set(2, 1);
+  const roadM = new T.Mesh(new T.PlaneGeometry(14, 1.8), new T.MeshStandardMaterial({ map: road, roughness: 1 }));
+  roadM.rotation.x = -Math.PI / 2; roadM.position.y = .005; S.root.add(roadM);
+  const truck = new T.Group(); g.add(truck);
+  const cab = new T.Mesh(new T.BoxGeometry(1, 1, 1.2), mat(C.tosca)); cab.position.set(1.05, .85, 0);
+  const win = new T.Mesh(new T.BoxGeometry(.05, .4, 1), mat(C.ink, { roughness: .3 })); win.position.set(1.56, 1.05, 0);
+  const lamp = new T.Mesh(new T.BoxGeometry(.05, .14, .2), new T.MeshStandardMaterial({ color: 0xFFF3A0, emissive: 0xFFE066, emissiveIntensity: .8 })); lamp.position.set(1.56, .55, .42);
+  const lamp2 = lamp.clone(); lamp2.position.z = -.42;
+  const bedM = mat(C.ink);
+  const bed = new T.Group();
+  const part = (w, h, d, x, y, z) => { const m = new T.Mesh(new T.BoxGeometry(w, h, d), bedM); m.position.set(x, y, z); bed.add(m); };
+  part(1.9, .12, 1.25, -.45, .45, 0); part(1.9, .5, .08, -.45, .72, .6); part(1.9, .5, .08, -.45, .72, -.6); part(.08, .5, 1.25, -1.36, .72, 0); part(.08, .5, 1.25, .46, .72, 0);
+  const stripe = new T.Mesh(new T.BoxGeometry(1.92, .1, 1.27), mat(C.wortel)); stripe.position.set(-.45, .93, 0); bed.add(stripe);
+  const chassis = new T.Mesh(new T.BoxGeometry(3, .2, 1), mat(0x2C2C2A)); chassis.position.set(.05, .3, 0);
+  truck.add(cab, win, lamp, lamp2, bed, chassis);
+  const wheels = [];
+  for (const [x, z] of [[1.05, .55], [1.05, -.55], [-.9, .55], [-.9, -.55]]) {
+    const w = new T.Group(); w.position.set(x, .28, z);
+    const tire = new T.Mesh(new T.CylinderGeometry(.28, .28, .22, 16), mat(0x222222)); tire.rotation.x = Math.PI / 2;
+    const hub = new T.Mesh(new T.CylinderGeometry(.12, .12, .24, 8), mat(0xD3D1C7)); hub.rotation.x = Math.PI / 2;
+    w.add(tire, hub); truck.add(w); wheels.push(w);
+  }
+  { const sb = shadowBlob(1.7); sb.position.y = .012; truck.add(sb); }
+  const cargo = new T.Mesh(new T.BoxGeometry(.7, .45, .55), mat(C.cream)); cargo.visible = false; cargo.position.set(-.45, .74, 0); truck.add(cargo);
+  const doc = makeDoc(); doc.visible = false; S.root.add(doc);
+  const dust = [...Array(10)].map(() => { const m = new T.Mesh(new T.SphereGeometry(.12, 6, 5), new T.MeshBasicMaterial({ color: 0xD3D1C7, transparent: true, opacity: 0 })); S.root.add(m); return { m, life: 0, v: new T.Vector3() }; });
+  let speed = 0, x = 0, shake = 0;
+  return {
+    hover(on) { S.tween(240, p => { truck.position.y = on ? .12 * easeOut(p) : .12 * (1 - easeOut(p)); }); },
+    update(dt, t) {
+      x += speed * dt; truck.position.x = x;
+      wheels.forEach(w => w.rotation.z -= speed * dt / .28);
+      road.offset.x -= speed * dt * .07;
+      if (!S.busy && !RM) truck.position.y = Math.abs(Math.sin(t * 22)) * .012;
+      cab.rotation.z = shake * Math.sin(t * 40) * .03;
+      for (const d of dust) if (d.life > 0) { d.life -= dt; d.m.position.addScaledVector(d.v, dt); d.m.scale.setScalar(1 + (1 - d.life) * 2); d.m.material.opacity = Math.max(0, d.life * .6); }
+      if (speed > 1 && Math.random() < .5) { const d = dust.find(d => d.life <= 0); if (d) { d.life = 1; d.m.position.set(x - 1.6, .25, (Math.random() - .5) * .8); d.v.set(-1 - Math.random(), .6, (Math.random() - .5)); } }
+    },
+    async drop() {
+      doc.visible = true;
+      await S.tween(650, p => { const e = easeInOut(p); doc.position.set(-.45, 3.8 - 2.9 * e, 0); doc.rotation.set(-Math.PI / 2 * e, e * 3, 0); doc.scale.setScalar(1 - .4 * e); });
+      doc.visible = false; cargo.visible = true;
+      await S.tween(400, p => { cargo.scale.setScalar(spring(p)); shake = 1 - p; });
+      shake = .6; await S.wait(300);
+      await S.tween(1300, p => { speed = 14 * p * p; });
+      speed = 0; x = -9; cargo.visible = false;
+    },
+    async reset() {
+      await S.tween(900, p => { x = -9 + 9 * easeOut(p); speed = 0; wheels.forEach(w => w.rotation.z -= .2 * (1 - p)); });
+      x = 0; shake = 0;
+    }
+  };
+}
+
+const builds = { keranjang, peti, truk };
+document.querySelectorAll('.opt').forEach(sec => {
+  const stage = sec.querySelector('.stage');
+  const st = Stage(stage, builds[sec.dataset.scene]);
+  sec.querySelector('[data-try]').onclick = () => st.run('nota-contoh.xlsx');
+  sec.querySelector('[data-file]').onclick = () => { const i = document.createElement('input'); i.type = 'file'; i.accept = '.xlsx,.xls,.csv,image/*'; i.onchange = () => i.files[0] && st.run(i.files[0].name); i.click(); };
+  stage.addEventListener('click', e => { if (e.detail === 2) st.run('nota-contoh.xlsx'); });
+});
+})();
+</script>
+</body>
+</html>
