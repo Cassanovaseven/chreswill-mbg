@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f1217" />
+  <title>Kota Karya</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <div id="app">
+    <canvas id="city" aria-label="Kota perusahaan 3D. Seret untuk memutar, cubit untuk zoom."></canvas>
+    <canvas id="brain" aria-label="Peta ide 3D. Seret untuk memutar, ketuk bola untuk memilih." hidden></canvas>
+
+    <header class="hud" id="hud">
+      <div class="hud-main glass">
+        <button class="name-btn" id="nameBtn" aria-label="Ubah nama perusahaan">
+          <span class="name" id="coName"></span>
+          <span class="lvl" id="coLevel"></span>
+        </button>
+        <div class="bar" aria-hidden="true"><i id="lvlBar"></i></div>
+      </div>
+      <div class="hud-side">
+        <button class="round glass" id="timeBtn" aria-label="Ganti waktu: otomatis"></button>
+        <button class="round glass" id="trophyBtn" aria-label="Pencapaian"></button>
+      </div>
+    </header>
+
+    <section class="sheet glass" id="sheet" data-tab="kota">
+      <div class="grab" aria-hidden="true"></div>
+      <div class="panel" id="p-kota"></div>
+      <div class="panel" id="p-tugas"></div>
+      <div class="panel" id="p-fokus"></div>
+    </section>
+
+    <section class="brain-ui" id="p-ide" hidden></section>
+
+    <nav class="dock glass" id="dock" aria-label="Menu utama">
+      <i class="dock-pill" aria-hidden="true"></i>
+    </nav>
+
+    <div class="toasts" id="toasts" aria-live="polite"></div>
+    <div class="island" id="island" role="status" aria-live="polite"></div>
+    <div class="modal-wrap" id="modal" hidden></div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

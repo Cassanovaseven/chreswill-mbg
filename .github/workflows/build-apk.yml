@@ -1,0 +1,41 @@
+name: Build APK Kota Karya
+
+on:
+  push:
+    branches: [claude/task-reminder-3d-app-56nzby]
+    paths: ['task-reminder/**', '.github/workflows/build-apk.yml']
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: task-reminder
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: task-reminder/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+      - run: npm ci
+      - run: npm run build
+      - run: npx cap sync android
+      - name: Build debug APK
+        working-directory: task-reminder/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+      - name: Rename APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk KotaKarya.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KotaKarya-apk
+          path: task-reminder/KotaKarya.apk
+          if-no-files-found: error
