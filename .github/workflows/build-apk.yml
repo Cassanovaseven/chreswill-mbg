@@ -23,7 +23,8 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - uses: android-actions/setup-android@v3
+      - name: Terima lisensi Android SDK
+        run: yes | sdkmanager --licenses > /dev/null || true
       - run: npm ci
       - run: npm run build
       - run: npx cap sync android
