@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Kota Karya</string>
+    <string name="title_activity_main">Kota Karya</string>
+    <string name="package_name">id.karya.kota</string>
+    <string name="custom_url_scheme">id.karya.kota</string>
+</resources>

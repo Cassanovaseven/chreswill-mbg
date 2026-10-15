@@ -1,0 +1,17 @@
+{
+  "appId": "id.karya.kota",
+  "appName": "Kota Karya",
+  "webDir": "dist",
+  "backgroundColor": "#0f1217",
+  "android": {
+    "backgroundColor": "#0f1217"
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "iconColor": "#3ec99a"
+    },
+    "SystemBars": {
+      "style": "DARK"
+    }
+  }
+}
